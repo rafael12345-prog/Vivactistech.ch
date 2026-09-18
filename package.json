@@ -1,0 +1,9 @@
+{
+  "name": "vivactistech-ch",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Landing pages Vivactis Suisse, hebergees sur Infomaniak.",
+  "scripts": {
+    "build": "node scripts/build.js"
+  }
+}

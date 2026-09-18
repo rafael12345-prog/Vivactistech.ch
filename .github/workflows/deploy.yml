@@ -1,0 +1,43 @@
+name: Deploy to Infomaniak
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-infomaniak
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Trust the Infomaniak host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.INFOMANIAK_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Load the deploy SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.INFOMANIAK_SSH_KEY }}
+
+      - name: Sync dist/ to Infomaniak
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p ${{ secrets.INFOMANIAK_PORT || 22 }}" \
+            dist/ "${{ secrets.INFOMANIAK_USER }}@${{ secrets.INFOMANIAK_HOST }}:${{ secrets.INFOMANIAK_PATH }}"
