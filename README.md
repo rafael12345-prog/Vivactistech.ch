@@ -1,56 +1,78 @@
 # vivactistech.ch
 
-Landing pages publiées sur **vivactistech.ch**, hébergées chez Infomaniak.
+Landing pages publiées sur **vivactistech.ch**, hébergées chez Infomaniak sur un site
+de type **Node.js**.
 
-## Comment une modification arrive en ligne
+## Organisation des pages
 
-Ce dépôt est la seule source de vérité. Personne ne se connecte à Infomaniak à la main.
-
-```
-modification -> commit sur main -> GitHub Actions -> build Node -> Infomaniak
-```
-
-Tout ce qui est dans `src/` est buildé puis publié. Le reste du dépôt ne l'est pas.
-
-## Build
-
-Le build est du Node.js pur, sans framework imposé :
+Les pages vivent dans `src/`, une landing par dossier :
 
 ```
-npm install
-npm run build
+src/
+  index.html            -> https://vivactistech.ch/
+  <nom>/index.html      -> https://vivactistech.ch/<nom>/
+  assets/               -> fichiers partagés (CSS, images, polices…)
 ```
 
-`scripts/build.js` copie `src/` vers `dist/`. C'est `dist/` qui est ensuite envoyé sur
-Infomaniak. Quand les landing pages définitives remplaceront le contenu actuel de
-`src/` (ou l'outillage de build, si un générateur type Astro/Vite/Next export est
-introduit), seul `scripts/build.js` (ou le script `build` de `package.json`) a besoin
-d'être adapté : le reste de la chaîne (CI, déploiement) ne change pas.
+Les fichiers propres à une landing (images, CSS, etc.) sont rangés dans son dossier,
+à côté de son `index.html`.
 
-## Déploiement, côté technique
+Pour ajouter une landing : créer `src/<nom>/index.html`, commit, push sur `main`,
+puis mettre à jour le site depuis Infomaniak (voir plus bas).
 
-`.github/workflows/deploy.yml` construit `dist/` puis le synchronise par `rsync` via
-SSH vers l'hébergement Infomaniak, à chaque push sur `main`.
+## Build et serveur
 
-Quatre secrets de dépôt sont nécessaires (Settings → Secrets and variables →
-Actions) :
+Tout est en Node.js pur, **sans aucune dépendance** :
 
-| Secret | Contenu |
+```
+npm run build   # scripts/build.js copie src/ vers dist/
+npm start       # server.js sert dist/ sur le port $PORT (3000 par défaut)
+```
+
+`server.js` est un serveur statique minimal (modules natifs de Node uniquement) :
+
+- il sert le contenu de `dist/` ;
+- `/dossier` redirige vers `/dossier/` (sinon les chemins relatifs des pages cassent) ;
+- une page inconnue renvoie une 404 ;
+- toute tentative de sortir de `dist/` est refusée (403).
+
+Test en local :
+
+```
+npm run build && npm start
+# puis ouvrir http://localhost:3000/
+```
+
+## Mise en ligne
+
+Il n'y a **pas** de déploiement par GitHub Actions : Infomaniak refuse pour l'instant
+l'authentification par clé SSH, l'ancien workflow `rsync` a donc été supprimé.
+
+Le déploiement passe par le **git intégré au tableau de bord Infomaniak**, qui a cloné
+ce dépôt (branche `main`) sur le serveur.
+
+```
+modification -> commit + push sur main -> mise à jour git depuis le Manager Infomaniak
+             -> npm run build -> redémarrage du site (npm start)
+```
+
+Réglages attendus du site Node.js dans le Manager Infomaniak :
+
+| Réglage | Valeur |
 |---|---|
-| `INFOMANIAK_HOST` | nom d'hôte SSH de l'hébergement (ex. `xxx.ftp.infomaniak.com`) |
-| `INFOMANIAK_USER` | utilisateur SSH de l'hébergement |
-| `INFOMANIAK_SSH_KEY` | clé privée SSH dédiée au déploiement (la clé publique associée est ajoutée dans le panneau Infomaniak) |
-| `INFOMANIAK_PATH` | chemin distant du dossier servi (ex. `/sites/vivactistech.ch/`) |
+| Branche | `main` |
+| Commande de build | `npm run build` |
+| Commande de démarrage | `npm start` |
+| Version de Node | 18 ou plus (`.nvmrc` indique 20) |
 
-`INFOMANIAK_PORT` est optionnel (défaut `22`), à ajouter seulement si Infomaniak
-impose un port SSH différent.
+Le port est fourni par Infomaniak via la variable d'environnement `PORT`, que
+`server.js` lit automatiquement.
 
-La clé SSH se génère en local (`ssh-keygen -t ed25519 -C "deploy-vivactistech-ch"`),
-la clé publique s'ajoute depuis le Manager Infomaniak (Hébergement web → SSH), et
-la clé privée va dans le secret `INFOMANIAK_SSH_KEY`. Elle n'a pas besoin d'exister
-ailleurs que dans les secrets de ce dépôt.
+`dist/` n'est pas versionné : il est reconstruit sur le serveur à chaque mise à jour.
+Après un push sur `main`, rien ne change en ligne tant que le site n'a pas été mis à
+jour (pull + build + redémarrage) depuis le Manager.
 
 ## Règles de contenu
 
 - Chemins **relatifs** ou absolus depuis la racine (`/assets/...`), jamais un chemin local.
-- Pas de dépendance externe non versionnée : tout ce qui est nécessaire au build passe par `package.json`.
+- Aucune dépendance npm : le build et le serveur n'utilisent que Node.js.
